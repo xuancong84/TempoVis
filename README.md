@@ -2,11 +2,10 @@
 
 This is a visualization plugin for Windows Media Player. It was one of my class project while I was doing my PhD in National University of Singapore.
 This program can compute the tempo of a music and track its beats while playing. It draws 3D graphics using OpenGL.
+<p float='left'><img src="./img/tempovis.jpg" alt="" width="90%" /></p>
 
-<p float='left'>
-  <img src="./img/tempovis.jpg" alt="" width="48%" />
-  <img src="./img/tempovis-analysis.jpg" alt="" width="48%" />
-</p>
+It can also show all the tempo analysis graphs:
+<p float='left'><img src="./img/tempovis-analysis.jpg" alt="" width="90%" /></p>
 
 
 **How to install**:
@@ -41,4 +40,5 @@ After you have installed the plugin using regsvr32, you can open Windows Media P
 
 
 **The Algorithm**:
+
 I have revised the tempo estimation algorithm recently. By the time when I submitted my project, the algorithm had only ~92% accuracy. Now, it has ~97% accuracy and has much better beat tracking capability. It uses hybrid "filter-bank auto-correlation" and "filter-bank cosine-similarity auto-correlation-gram" algorithm with spectro-gram selection.
