@@ -1,0 +1,40 @@
+// iTempoVis.idl : IDL source for TempoVis.dll
+// Copyright (c) Microsoft Corporation. All rights reserved.
+
+// This file will be processed by the MIDL tool to
+// produce the type library (iTempoVis.tlb) and marshalling code.
+
+import "oaidl.idl";
+import "ocidl.idl";
+	[
+		object,
+		uuid(C5DFF578-2E89-4438-B900-C56B24C57AFF),
+		dual,
+		helpstring("ITempoVis Interface"),
+		pointer_default(unique)
+	]
+	interface ITempoVis : IDispatch
+	{
+		[propget, id(1), helpstring("property foregroundColor")] HRESULT foregroundColor([out, retval] BSTR *pVal);
+		[propput, id(1), helpstring("property foregroundColor")] HRESULT foregroundColor([in] BSTR newVal);
+	};
+
+[
+	uuid(D72BC468-FB80-443b-B7B0-CF2E2051AFD1),
+	version(1.0),
+	helpstring("TempoVis 1.0 Type Library")
+]
+library TEMPOVISLib
+{
+	importlib("stdole32.tlb");
+	importlib("stdole2.tlb");
+
+	[
+		uuid(AC00ACEE-18C3-432a-8F07-6C128033B7EE),
+		helpstring("TempoVis Class")
+	]
+	coclass TempoVis
+	{
+		[default] interface ITempoVis;
+	};
+};

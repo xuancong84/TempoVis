@@ -1,0 +1,41 @@
+HKCR
+{
+    NoRemove CLSID
+    {
+        ForceRemove {AC00ACEE-18C3-432a-8F07-6C128033B7EE} = s 'TempoVis Class'
+        {
+            InprocServer32 = s '%MODULE%'
+            {
+                val ThreadingModel = s 'Apartment'
+            }
+            'TypeLib' = s '{D72BC468-FB80-443b-B7B0-CF2E2051AFD1}'
+        }
+    }
+}
+HKEY_LOCAL_MACHINE
+{
+    NoRemove SOFTWARE
+    {
+        NoRemove Microsoft
+        {
+            NoRemove MediaPlayer
+            {
+                NoRemove Objects
+                {
+                    NoRemove Effects
+                    {
+                        ForceRemove TempoVis
+                        {
+                            Properties
+                            {
+                                val classid = s '{AC00ACEE-18C3-432a-8F07-6C128033B7EE}'
+                                val name = s 'res://TempoVis.dll/RT_STRING/#101'
+                                val description = s 'res://TempoVis.dll/RT_STRING/#105'
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

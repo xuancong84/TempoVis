@@ -1,0 +1,9 @@
+; TempoVis.def : Declares the module parameters.
+
+LIBRARY      "TEMPOVIS.DLL"
+
+EXPORTS
+	DllCanUnloadNow     PRIVATE
+	DllGetClassObject   PRIVATE
+	DllRegisterServer   PRIVATE
+	DllUnregisterServer	PRIVATE
