@@ -6,7 +6,7 @@
 
 
  /* File created by MIDL compiler version 7.00.0555 */
-/* at Tue Jul 23 21:41:11 2013
+/* at Tue Jan 12 11:16:28 2016
  */
 /* Compiler settings for iTempoVis.idl:
     Oicf, W1, Zp8, env=Win32 (32b run), target_arch=X86 7.00.0555 

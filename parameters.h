@@ -1,3 +1,25 @@
+#pragma once
+
+#define		_USE_MATH_DEFINES
+#define		__DRAWFAST 1
+#include	<math.h>
+#include	<assert.h>
+#include	<mmsystem.h>
+#include	<mmreg.h>
+#include	<msacm.h>
+#include	<math.h>
+#include	<iostream>
+#include	<string>
+#include	<fstream>
+#include	<float.h>
+#include	<queue>
+#include	<map>
+#include	<cmath>
+#include	"opengl.h"
+#include	"glext.h"
+#include	"gl\glu.h"
+#include	"effects.h"
+
 // Extra math constants
 #define	M_2PI				6.283185307179586476925286766559
 #define	M_LOG_2				0.69314718055994530941723212145818
@@ -20,20 +42,21 @@
 #define	RECORDERSR		44100
 
 // Dynamic tempo-est parameters
-#define	TempoPrecision			100																	// ticks per second
+#define	TempoPrecision			120																	// ticks per second
 #define	TempoBufferLength		8																	// seconds
 #define	TempoMinBufferSize		2																	// seconds
 #define	TempoStableTime			4.0f																// in seconds
-#define	TempoMaxPeriod			6.0f																// in seconds, 10 bpm (exclusive)
+#define	TempoMaxPeriod			8.0f																// in seconds, 10 bpm (exclusive)
 #define	TempoMinPeriod			0.2f																// in seconds, 300 bpm(inclusive)
 #define	TempoHalfLife			16																	// seconds (tempo pattern memory)
 #define	PhaseHalfLife			32																	// seconds (phase pattern memory)
 #define	TempoMaxShift			(int)(TempoPrecision*TempoMaxPeriod+0.5)
-#define	CTempoPeriod			0.9f																// critical tempo period in second
+#define	CTempoPeriod			1.5f																// critical tempo period in second
 #define	CTempoEnhFactor			M_E																	// critical tempo enhancement factor
 #define	PhaseCombFiltSharp		0.05f																// Pulse width w.r.t 1 period
-#define	TempoPeakSharp			0.03125																// Pulse width w.r.t corr spec
+#define	TempoPeakSharp			0.05f																// Pulse width w.r.t corr spec
 #define	TempoEnhPhaseMax		1.4142f																// max tempo strength enhancement factor
+#define	PresetTempoEnhPhaseMax	4.0f																// max tempo strength enhancement factor
 #define	PhaseEnhTempoMax		1.4142f																// max tempo strength enhancement factor
 #define	TempoEnhPhaseMaxTime	6																	// time for tempo strength enhancement to reach max
 #define	PhaseEnhTempoMaxTime	6																	// time for tempo strength enhancement to reach max
@@ -41,6 +64,7 @@
 #define	PhaseEnhTempoRatio		pow(PhaseEnhTempoMax,1.0f/(PhaseEnhTempoMaxTime*TempoPrecision))	// tempo strength enhancement per phase lock
 #define	MinTempoPeriodStep		0.015625
 #define	MeterAmbiThreshold		0.03125f
+#define ResetDelayThreshold		3.0f																// minimum time difference to trigger a reset buffer
 
 // Graphic parameter
 #define	DELTA				1.0e-8f
@@ -65,8 +89,8 @@
 #define	SPINSTARSCALE		0.0025f								// scale of spin stars
 #define	WAVERINGWIDTH		(SPINRADIUS*0.2f)					// width of time waveform ring
 #define	STARRADIUS			8.0f								// length of star tips w.r.t cube radius (1.0f)
-#define	CameraSpeed			0.03125f							// w.r.t unit sphere per second
-#define	SceneRotPeriod		60									// in seconds times average FPS
+#define	DefaultCameraSpeed	0.03125f							// w.r.t unit sphere per second
+#define	DefaultSceneRotSpeed	1/60.0f							// in seconds times average FPS
 #define	StarScaleHalfLife	1									// in seconds
 //#define	SceneRotPeriod		M_PI*BELTDEPTHSIZE*SPACERADIUS/(BELT_FPS*BELTLENGTH)
 
@@ -79,34 +103,38 @@
 #define	POWERHALFLIFE		4									// in seconds
 #define	FFTEXPFACTOR		0.03125f
 
-const int	BELT_INC  = (int)((FLOAT)TempoPrecision/BELT_FPS+0.5);
-const FLOAT BELT_OFF  = (FLOAT)M_PI/BELTCIRCUMSIZE;
+extern	const int	BELT_INC;;
+extern	const FLOAT BELT_OFF;
 
-int total_added = 0;
+extern	int total_added;
 
-GLfloat	space_attn[3]	= { 0.0f, 0.2f, 0 };
-float	zero_vector[4]	= { 0, 0, 0, 1 };
-float	ones_vector[4]	= { 1, 1, 1, 1 };
-float	zero_4vector[4]	= { 0, 0, 0, 0 };
+extern	GLfloat	space_attn[3];
+extern	float	zero_vector[4];
+extern	float	ones_vector[4];
+extern	float	zero_4vector[4];
 
 // Lighting and material parameters
 #define	attn_const_0		1.0f								// attenuation, constant term
 #define	attn_const_1		1.5f								// attenuation, linear term
 #define	attn_const_2		6.0f								// attenuation, quadratic term
 #define	shiny_const			20.0f								// attenuation, quadratic term
-FLOAT	l_ambient[4]={0.4f,0.4f,0.4f,1.0f};
-FLOAT	l_diffuse[4]={0.2f,0.2f,0.2f,1.0f};
-FLOAT	l_specular[4]={1.5f,1.5f,1.5f,1.0f};
-FLOAT	m_ambient[4]={0.4f,0.4f,0.4f,1.0f};
-FLOAT	m_diffuse[4]={0.2f,0.2f,0.2f,1.0f};
-FLOAT	m_specular[4]={1.0f,1.0f,1.0f,1.0f};
-FLOAT	m_emissive[4]={0.01f,0.01f,0.01f,1.0f};
+extern	FLOAT	l_ambient[4];
+extern	FLOAT	l_diffuse[4];
+extern	FLOAT	l_specular[4];
+extern	FLOAT	m_ambient[4];
+extern	FLOAT	m_diffuse[4];
+extern	FLOAT	m_specular[4];
+extern	FLOAT	m_emissive[4];
 
 // For offline estimation
-#define	window_size		0.04f			// in seconds
-#define	hop_size		0.01f			// in seconds
+#define	window_size		(4.0f/TempoPrecision)	// in seconds
+#define	hop_size		(1.0f/TempoPrecision)	// in seconds
+//#define	window_size		0.04	// in seconds
+//#define	hop_size		0.01	// in seconds
 #define	delta_width		6
-#define	nFilterBands	8
+#define	nFilterBanks	8
 
-const int	nTotalParams = nFilterBands+2;
-const int	nTotalBufs	 = 4+nFilterBands*3;
+#define nTotalParams (nFilterBanks + 2)
+#define	nTotalBufs (6 + nFilterBanks * 3)
+
+#define SafeRelease(p) {if(p){p->Release();p=NULL;}}

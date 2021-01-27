@@ -1,20 +1,15 @@
+#include "StdAfx.h"
+
+#include <vector>
+#include "parameters.h"
+#include "TempoEst.h"
+#include "VisualHelper.h"
+#include "TempoVis1.h"
+#include "opengl.h"
+
+using namespace std;
 
 const float delta_mul = 3.0f/(delta_width*(delta_width+1)*(2*delta_width+1));
-
-typedef struct{
-   int		frameSize;       	/* speech frameSize */
-   int		numChans;        	/* number of channels */
-   long		sampPeriod;			/* sample period */
-   int		fftN;            	/* fft size */
-   int		klo,khi;         	/* lopass to hipass cut-off fft indices */
-   bool		usePower;    		/* use power rather than magnitude */
-   bool		takeLogs;    		/* log filterbank channels */
-   float	fres;				/* scaled fft resolution */
-   float* 	cf;          	 	/* array[1..pOrder+1] of centre freqs */
-   short* 	loChan;				/* array[1..fftN/2] of loChan index */
-   float* 	loWt;				/* array[1..fftN/2] of loChan weighting */
-   float* 	x;					/* array[1..fftN] of fftchans */
-}FBankInfo;
 
 float	*CreateVector( int size ){
 	float	*v = new float [(size+1)*sizeof(float)];
@@ -125,12 +120,12 @@ void Wave2FBank( float* s, float* fbank, float *te, FBankInfo& info )
    /* Compute frame energy if needed */
    if (te != NULL){
       *te = 0.0;
-      for (k=1; k<=info.frameSize; k++)
+      for (k=0; k<info.frameSize; k++)
          *te += (s[k]*s[k]);
    }
    /* Apply FFT */
-   for (k=1; k<=info.frameSize; k++)
-      info.x[k] = s[k]*(sin(mul*(k-1))+1);    /* copy to workspace */
+   for (k=0; k<info.frameSize; k++)
+      info.x[k+1] = s[k]*(sin(mul*k)+1);    /* copy to workspace */
    for (k=info.frameSize+1; k<=info.fftN; k++)
       info.x[k] = 0.0;   /* pad with zeroes */
    Realft(info.x);                            /* take fft */
@@ -158,32 +153,86 @@ void Wave2FBank( float* s, float* fbank, float *te, FBankInfo& info )
       }
 }
 
-float	ComputeTempo( float *data, int size, int sr ){	//sr: sampling rate
+FLOAT stddev(float *data, int size){
+	double sum = 0, sum2 = 0;
+	for (int x = 0; x < size; ++x){
+		sum += data[x];
+		sum2 += data[x] * data[x];
+	}
+	sum /= size, sum2 /= size;
+	return sqrt(sum2 - sum*sum);
+}
+
+FLOAT mean(float *data, int size){
+	double sum = 0;
+	for (int x = 0; x < size; ++x)
+		sum += data[x];
+	return sum / size;
+}
+
+void zero_mean(float *data, int size){
+	FLOAT m = mean(data, size);
+	for (int x = 0; x < size; ++x)
+		data[x] -= m;
+}
+
+FLOAT computeSpecWeight(float *data, int size){
+	//return 1;
+	//FLOAT a = stddev(data, size);
+	FLOAT b = calcMaxPeakHeight(data, size);
+	return b*b;
+}
+
+FLOAT computeSpecWeightForPeak(float *data, int size, int peak){
+	//return 1;
+	//FLOAT a = stddev(data, size);
+	FLOAT b = calcPeakHeight(data, size, peak);
+	return b*b;
+}
+
+void compressTowardsMean(FLOAT *data, int size, FLOAT factor){
+	FLOAT m = mean(data, size);
+	for (int x = 0; x < size; ++x)
+		data[x] = m + (data[x] - m)*factor;
+}
+
+FLOAT cos_sim(vector <FLOAT> &v1, vector <FLOAT> &v2){
+	FLOAT dot = 0, n1 = 0, n2 = 0;
+	for (int x = 0; x < v1.size(); ++x){
+		dot += v1[x] * v2[x];
+		n1 += v1[x] * v1[x];
+		n2 += v2[x] * v2[x];
+	}
+	return dot / sqrt(n1*n2);
+}
+
+vector <FLOAT> cosine_auto_corr(vector <vector <FLOAT>> &fbank, int max_shift){
+	vector <FLOAT> autocorr(max_shift);
+	for (int x = 0; x < max_shift; ++x){
+		register double sum = 0;
+		register int Y = fbank.size() - x;
+		for (register int y=0; y < Y; ++y){
+			sum += cos_sim(fbank[y], fbank[y + x]);
+		}
+		autocorr[x] = sum / Y;
+	}
+	return autocorr;
+}
+
+float ComputeTempo( float *data, int size, int sr, float &pri_tempo ){	//sr: sampling rate
 	const int	winpts = (int)(window_size*sr+0.5);
 	const int	hoppts = (int)(hop_size*sr+0.5);
 	const int	fftpts = (int)pow(2.0,ceil(log((double)winpts)/log(2.0)));
 	const int	nframe = (int)((double)(size-winpts)/hoppts+1.0);
-	const int	nfft_2 = fftpts/2;
-	float	win_time = (float)winpts/sr;
-	float	hop_time = (float)hoppts/sr;
-	float	mul = (float)M_PI/(winpts-1);
 
-	// Allocate persistent buffer first
-	if(!b_est) for(int x=0;x<nTotalBufs+4;x++){
-		est_spec[x] = new float [TempoMaxShift+1];
-		*(int*)est_spec[x] = TempoMaxShift;
-		b_est = 1;
-	}
-
-	FLOAT	TempoCorr[nTotalBufs][TempoMaxShift],
-			TempoSpec[TempoMaxShift],
-			TempoSpecP[TempoMaxShift],
-			Tempo2WindowFunc[TempoMaxShift],
-			Tempo3WindowFunc[TempoMaxShift],
-			ExpWindowFunc[TempoMaxShift];
+	vector <vector <FLOAT>>	TempoCorr;
+	vector <FLOAT>	TempoSpec(TempoMaxShift),
+					TempoSpecP(TempoMaxShift),
+					Tempo2WindowFunc(TempoMaxShift),
+					Tempo3WindowFunc(TempoMaxShift);
 
 	// Initialize filterbank
-	FBankInfo fb_info = InitFBank( fftpts, (long)(1e7f/sr+0.5), nFilterBands, 0.0f, 8000.0f, true, false );
+	FBankInfo fb_info = InitFBank( fftpts, (long)(1e7f/sr+0.5), nFilterBanks, 0.0f, 8000.0f, false, false );
 
 	// Initialize window functions
 	{
@@ -192,112 +241,117 @@ float	ComputeTempo( float *data, int size, int sr ){	//sr: sampling rate
 		for( int x=0; x<TempoMaxShift; x++ ){
 			Tempo2WindowFunc[x]	= pow((FLOAT)M_E*x/f2,(FLOAT)f2/x)*x*(exp(-(FLOAT)M_E*x/f2) );
 			Tempo3WindowFunc[x]	= pow((FLOAT)M_E*x/f2,(FLOAT)f3/x)*x*(exp(-(FLOAT)M_E*x/f3) );
-			ExpWindowFunc[x]	= 1-exp( -pow((FLOAT)M_E*x/(CTempoPeriod/hop_size),2) );
+			//ExpWindowFunc[x] = exp(-(FLOAT)x / (10*CTempoPeriod*TempoPrecision));
 		}
-		Tempo2WindowFunc[0] = 0;
-		Tempo3WindowFunc[0] = 0;
-		f2 = 1.0f/getMax( Tempo2WindowFunc, TempoMaxShift );
-		f3 = 1.0f/getMax( Tempo3WindowFunc, TempoMaxShift );
-		for( int x=0; x<TempoMaxShift; x++ ){
-			Tempo2WindowFunc[x]	*= f2;
-			Tempo3WindowFunc[x]	*= f3;
-		}
+		Tempo2WindowFunc[0] = Tempo3WindowFunc[0] = 0;
+		normCorr(Tempo2WindowFunc.data(), TempoMaxShift);
+		//compressTowardsMean(Tempo2WindowFunc, TempoMaxShift);
+		normCorr(Tempo3WindowFunc.data(), TempoMaxShift);
+		//compressTowardsMean(Tempo3WindowFunc, TempoMaxShift);
+		//compressTowardsMean(ExpWindowFunc, TempoMaxShift);
 	}
 
 	// Allocate dynamic buffers
-	float	fbank[nFilterBands+1];
-	float	*AllBuf	= new float [nframe*nTotalParams];
-	float	*DifBuf	= new float [nframe];
-	float	*fdata	= new float [fftpts+1];
+	float	fbank[nFilterBanks+1];
+	vector <vector<FLOAT>> AllBuf(nFilterBanks+1, vector<FLOAT>(nframe));
+	vector <FLOAT> DifBuf(nframe);
+	vector <FLOAT> fdata(fftpts);
 
 	// Extract all frames
+	zero_mean(data, size);
+	vector <vector <FLOAT>> fbs(nframe);
+	*(int*)fbank = nFilterBanks;
 	for( int x=0; x<nframe; x++ ){
-		memset( &fdata[1], 0, fftpts*sizeof(float) );
-		memcpy( &fdata[1], &data[x*hoppts], winpts*sizeof(float) );
-
-		// get amplitude
-		AllBuf[x] = getMax(&fdata[1],winpts)-getMin(&fdata[1],winpts);
+		memcpy( fdata.data(), &data[x*hoppts], winpts*sizeof(float) );
 
 		// get filterbank and energy
-		*(int*)fdata  = fftpts;
-		*(int*)&fbank = nFilterBands;
-		Wave2FBank( fdata, fbank, &AllBuf[(nTotalParams-1)*nframe+x], fb_info );
-		for( int y=1; y<=nFilterBands; y++ ) AllBuf[y*nframe+x] = fbank[y];
+		Wave2FBank( fdata.data(), fbank, &AllBuf[0][x], fb_info );
+		for( int y=1; y<=nFilterBanks; y++ )
+			AllBuf[y][x] = fbank[y];
 	}
 
-	// Process feature
-	memset( TempoSpec, 0, sizeof(TempoSpec) );
-	float	fact;
-	int		N = 0;
-	for( int x=0; x<nTotalParams; x++ ){
-		fact = (x==0 || x==(nTotalParams-1))?1.0f:1.0f;
-		normCorr(autoCorr( TempoCorr[N], &AllBuf[x*nframe], TempoMaxShift, nframe ),TempoMaxShift);
-		addCorr( TempoSpec, TempoCorr[N], TempoMaxShift, est_fact[N]=fact*calcSpecWeightByMaxPeakHeight(TempoCorr[N],TempoMaxShift) );
-		N++;
-		assert(N<=nTotalBufs);
+	{// extract filter bank and normalize energy w.r.t. filter bank
+		double sum_e = 0, sum_fb = 0;
+		for (int x = 0; x < nframe; ++x){
+			vector <FLOAT> fb(nFilterBanks + 1);
+			for (int y = 0; y <= nFilterBanks; ++y)
+				fb[y] = AllBuf[y][x];
+			fbs[x] = fb;
+			sum_e += fb[0] * fb[0];
+			for (int y = 1; y < nFilterBanks; ++y)
+				sum_fb += fb[y] * fb[y];
+		}
+		FLOAT mul = sqrt(sum_fb / sum_e);
+		for (int x = 0; x < nframe; ++x)
+			fbs[x][0] *= mul;
+	}
 
-		if( !x ) continue;	// don't do delta and delta-delta for amplitude
+	// Process features
+	for (int x = 0; x<AllBuf.size(); x++){
+		vector <FLOAT> buf(TempoMaxShift);
+		FLOAT weight;
+
+		autoCorr( buf.data(), AllBuf[x].data(), TempoMaxShift, nframe );
+		weight = computeSpecWeight(buf.data(), TempoMaxShift);
+		addCorr(TempoSpec.data(), buf.data(), TempoMaxShift, weight );
+		TempoCorr.push_back(buf);
+		est_fact.push_back(weight);
 
 		// add delta spectrum
-		deltaSpec( &AllBuf[x*nframe], DifBuf, nframe );
-		memcpy( &AllBuf[x*nframe], DifBuf, nframe*sizeof(float) );
-		normCorr(autoCorr( TempoCorr[N], &AllBuf[x*nframe], TempoMaxShift, nframe ),TempoMaxShift);
-		addCorr( TempoSpec, TempoCorr[N], TempoMaxShift, est_fact[N]=fact*calcSpecWeightByMaxPeakHeight(TempoCorr[N],TempoMaxShift) );
-		N++;
-		assert(N<=nTotalBufs);
+		deltaSpec( AllBuf[x].data(), DifBuf.data(), nframe );
+		AllBuf[x] = DifBuf;
+		autoCorr(buf.data(), AllBuf[x].data(), TempoMaxShift, nframe);
+		weight = computeSpecWeight(buf.data(), TempoMaxShift);
+		addCorr(TempoSpec.data(), buf.data(), TempoMaxShift, weight );
+		TempoCorr.push_back(buf);
+		est_fact.push_back(weight);
 
 		// add delta-delta spectrum
-		deltaSpec( &AllBuf[x*nframe], DifBuf, nframe );
-		memcpy( &AllBuf[x*nframe], DifBuf, nframe*sizeof(float) );
-		normCorr(autoCorr( TempoCorr[N], &AllBuf[x*nframe], TempoMaxShift, nframe ),TempoMaxShift);
-		addCorr( TempoSpec, TempoCorr[N], TempoMaxShift, est_fact[N]=fact*calcSpecWeightByMaxPeakHeight(TempoCorr[N],TempoMaxShift) );
-		N++;
-		assert(N<=nTotalBufs);
+		deltaSpec( AllBuf[x].data(), DifBuf.data(), nframe );
+		AllBuf[x] = DifBuf;
+		autoCorr( buf.data(), AllBuf[x].data(), TempoMaxShift, nframe );
+		weight = computeSpecWeight(buf.data(), TempoMaxShift);
+		addCorr(TempoSpec.data(), buf.data(), TempoMaxShift, weight );
+		TempoCorr.push_back(buf);
+		est_fact.push_back(weight);
 	}
+	est_spec = TempoCorr;
+	est_spec.push_back(TempoSpec);
 
-	getPeakSpectrum( TempoSpecP, TempoSpec, TempoMaxShift );
-	for( int x=1; x<TempoMaxShift; x++ ){
-		if( !TempoSpecP[x] ) continue;
-		double	fval = sqrt(TempoSpecP[x]);
-		for( int y=0; y<N; y++ )
-			fval = hypot( fval, est_fact[y]*calcPeakHeight( TempoCorr[y], TempoMaxShift, (FLOAT)x ) );
-		TempoSpecP[x] = (float)(fval*ExpWindowFunc[x]*ExpWindowFunc[TempoMaxShift-x]);
-	}
+	vector <FLOAT> cos_ac = cosine_auto_corr(fbs, TempoMaxShift);
+	est_spec.push_back(cos_ac);
 
-	for( int x=0; x<nTotalBufs; x++ ){
-		memcpy(&est_spec[x][1],TempoCorr[x],sizeof(FLOAT)*TempoMaxShift);
-	}
+	// find the positions of all peaks
+	getPeakSpectrum(TempoSpecP.data(), TempoSpec.data(), TempoMaxShift);
 	
-	memcpy(&est_spec[nTotalBufs][1],TempoSpec,sizeof(FLOAT)*TempoMaxShift);
-	memcpy(&est_spec[nTotalBufs+1][1],TempoSpecP,sizeof(FLOAT)*TempoMaxShift);
-/*/	memcpy(&est_spec[nTotalBufs][1],Tempo2WindowFunc,sizeof(float)*TempoMaxShift);
-	memcpy(&est_spec[nTotalBufs+1][1],Tempo3WindowFunc,sizeof(float)*TempoMaxShift);
-	memcpy(&est_spec[nTotalBufs+2][1],ExpWindowFunc,sizeof(float)*TempoMaxShift);
-*/	n_est = nTotalBufs+2;
+	// Obtain primary tempo peak, the most important step
+	int	itempo = findBestTempoPeak(TempoSpecP.data(), TempoMaxShift);
+	pri_tempo = itempo + interPeakPosi(&TempoSpec[itempo]);
 
-	// Release buffers
-	delete	[] fdata;
-	delete	[] DifBuf;
-	delete	[] AllBuf;
-
-
-	// Obtain primary tempo peak
-	int	offset  = (int)(TempoMinPeriod/hop_size+0.5);
-	int	itempo	= findMax(&TempoSpecP[offset],TempoMaxShift-offset)+offset;
-
-	// Extract relevant correlation spectrums
-	memset( TempoSpec, 0, sizeof(FLOAT)*TempoMaxShift );
-	for( int x=0; x<nTotalBufs; x++ ){
-		int posi = findPeakPosi( TempoCorr[x], TempoMaxShift, itempo );
-		register FLOAT f = (FLOAT)((posi-itempo)/(itempo*TempoPeakSharp));
-		addCorr( TempoSpec, TempoCorr[x], TempoMaxShift, est_fact2[x]=est_fact[x]*exp(-4*f*f) );
+	// Select correlation spectrums that are more relevant to this peak and re-weight
+	memset(TempoSpec.data(), 0, sizeof(FLOAT)*TempoMaxShift);
+	for (int x = 0; x<TempoCorr.size(); x++){
+		FLOAT weight = computeSpecWeightForPeak(TempoCorr[x].data(), TempoMaxShift, itempo);
+		addCorr(TempoSpec.data(), TempoCorr[x].data(), TempoMaxShift, weight);
+		est_fact2.push_back(weight);
 	}
 
-	// Adjust tempo
-	itempo	=	adjustTempo(itempo+interPeakPosi(&TempoSpec[itempo]), (int)(TempoMinPeriod/hop_size+0.5),
-							TempoMaxShift, TempoSpec, TempoSpecP, Tempo2WindowFunc, Tempo3WindowFunc );
+	//suppress the edge effect of correlation spectrum for tempo adjustment
+	//ExpUpperBound(TempoSpec.data(), TempoMaxShift);
+
+	getPeakSpectrum(TempoSpecP.data(), TempoSpec.data(), cos_ac.data(), TempoMaxShift);
+
+	// new method: find all acceptable peaks, then apply the window function
+	itempo	=	adjustTempo(pri_tempo, (int)(TempoMinPeriod/hop_size+0.5),
+							TempoMaxShift, TempoSpecP.data(), TempoSpecP.data(),
+							Tempo2WindowFunc.data(), Tempo3WindowFunc.data());
+
+	// for display purposes
+	est_spec.push_back(TempoSpecP);
+
 	float	tempo = itempo+interPeakPosi(&TempoSpec[itempo]);
 	bool	bAmbi = false;
-	if( getMeter(tempo,TempoSpec,TempoMaxShift)==3 ) if(!bAmbi) tempo = -tempo;
+	if (getInnerMeter(tempo, TempoSpec.data(), TempoMaxShift) == 3) if (!bAmbi) tempo = -tempo;
 	return	(float)hop_size*tempo;
 }
+

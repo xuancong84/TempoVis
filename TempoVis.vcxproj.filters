@@ -23,10 +23,25 @@
     <ClCompile Include="StdAfx.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="TempoVis.cpp">
+    <ClCompile Include="TempoVisdll.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="TempoVisdll.cpp">
+    <ClCompile Include="Visualization.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="VisualHelper.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="opengl.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="parameters.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TempoVis1.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TempoEst.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -59,16 +74,31 @@
     <ClInclude Include="StdAfx.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="TempoVis.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="wmp.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="wmpplug.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="TempoVis.hpp">
+    <ClInclude Include="TempoVisdll.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Visualization.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="VisualHelper.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="opengl.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="parameters.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="TempoVis1.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="TempoEst.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
